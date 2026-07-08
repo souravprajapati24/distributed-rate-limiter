@@ -1,7 +1,7 @@
 local current = redis.call('INCR', KEYS[1])
 
 if current == 1 then
-    redis.call('EXPIRE', KEYS[1], tonumber(ARGV[2]))
+    redis.call('EXPIREAT', KEYS[1], tonumber(ARGV[3]))
 end
 
 local limit = tonumber(ARGV[1])
