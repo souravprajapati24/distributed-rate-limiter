@@ -27,7 +27,7 @@ public class AlgorithmSelector {
         RateLimitAlgorithm algorithm = algorithms.get(type);
         if (algorithm == null) {
             log.warn("No RateLimitAlgorithm implementation registered for type {}. " +
-                    "Falling back to FIXED_WINDOW. This is expected during Phase 2 for tiers " +
+                    "Falling back to FIXED_WINDOW. This is expected for tiers " +
                     "using SLIDING_WINDOW, TOKEN_BUCKET, or LEAKY_BUCKET.", type);
             return algorithms.get(AlgorithmType.FIXED_WINDOW);
         }
