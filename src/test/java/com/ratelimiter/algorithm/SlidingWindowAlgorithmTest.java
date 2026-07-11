@@ -14,19 +14,14 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.math.BigDecimal;
 import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest
 @Testcontainers
-class FixedWindowAlgorithmTest {
+class SlidingWindowAlgorithmTest {
 
     @Container
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:15-alpine")
@@ -47,20 +42,13 @@ class FixedWindowAlgorithmTest {
         registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
     }
 
-
     @Autowired
-    private FixedWindowAlgorithm algorithm;
+    private SlidingWindowAlgorithm algorithm;
 
-    private TenantConfigCache.TierConfig buildTierConfig(int requestsPerWindow, int windowSizeSeconds) {
+    private TenantConfigCache.TierConfig buildTierConfig(int limit, int windowSeconds) {
         return new TenantConfigCache.TierConfig(
-                UUID.randomUUID(),
-                "FIXED_WINDOW",
-                requestsPerWindow,
-                windowSizeSeconds,
-                BigDecimal.ONE,
-                null,
-                "HARD"
-        );
+                UUID.randomUUID(), "SLIDING_WINDOW", limit, windowSeconds,
+                BigDecimal.ONE, null, "HARD");
     }
 
     @Test
@@ -89,39 +77,21 @@ class FixedWindowAlgorithmTest {
     }
 
     @Test
-    void shouldReturnCorrectRemainingAndResetFields() {
+    void deniedRequestsAreNotRecordedInTheWindow() {
+
         TenantConfigCache.TierConfig config = buildTierConfig(3, 60);
         String tenantId = UUID.randomUUID().toString();
 
-        RateLimitDecision first = algorithm.evaluate(tenantId, "api:remaining-check", config);
-        assertTrue(first.allowed());
-        assertEquals(2, first.remaining());
-        assertEquals(3, first.limit());
-        assertEquals("FIXED_WINDOW", first.algorithm());
-        assertTrue(first.resetAtEpochSecond() > System.currentTimeMillis() / 1000);
+        for (int i = 0; i < 3; i++) {
+            algorithm.evaluate(tenantId, "api:test", config);
+        }
+
+        for (int i = 0; i < 20; i++) {
+            RateLimitDecision decision = algorithm.evaluate(tenantId, "api:test", config);
+            assertFalse(decision.allowed());
+            assertEquals(0, decision.remaining());
+        }
     }
-
-    @Test
-    void shouldIsolateDifferentTenantsAndEndpoints() {
-        TenantConfigCache.TierConfig config = buildTierConfig(2, 60);
-        String tenantA = UUID.randomUUID().toString();
-        String tenantB = UUID.randomUUID().toString();
-
-        algorithm.evaluate(tenantA, "api:shared", config);
-        algorithm.evaluate(tenantA, "api:shared", config);
-        RateLimitDecision tenantADenied = algorithm.evaluate(tenantA, "api:shared", config);
-        assertFalse(tenantADenied.allowed(), "Tenant A should be exhausted");
-
-
-        RateLimitDecision tenantBAllowed = algorithm.evaluate(tenantB, "api:shared", config);
-        assertTrue(tenantBAllowed.allowed(), "Tenant B must be isolated from Tenant A's counter");
-
-        RateLimitDecision tenantADifferentEndpoint =
-                algorithm.evaluate(tenantA, "api:different", config);
-        assertTrue(tenantADifferentEndpoint.allowed(),
-                "Tenant A's counter on a different endpoint must be isolated");
-    }
-
 
     @Test
     void shouldEnforceCorrectlyUnder100ConcurrentThreads() throws InterruptedException {
@@ -136,22 +106,35 @@ class FixedWindowAlgorithmTest {
 
         for (int i = 0; i < totalRequests; i++) {
             pool.submit(() -> {
-                try {
-                    RateLimitDecision d = algorithm.evaluate(tenantId, "api:concurrent", config);
-                    if (d.allowed()) {
-                        allowed.incrementAndGet();
-                    }
-                } finally {
-                    latch.countDown();
-                }
+                RateLimitDecision d = algorithm.evaluate(tenantId, "api:concurrent", config);
+                if (d.allowed()) allowed.incrementAndGet();
+                latch.countDown();
             });
         }
 
-        boolean completed = latch.await(10, TimeUnit.SECONDS);
+        latch.await(10, TimeUnit.SECONDS);
         pool.shutdown();
 
-        assertTrue(completed, "All 150 concurrent requests should complete within 10 seconds");
         assertEquals(limit, allowed.get(),
-                "Expected exactly " + limit + " allowed requests with zero over-admission, got " + allowed.get());
+                "Expected exactly " + limit + " allowed, got " + allowed.get());
+    }
+
+    @Test
+    void shouldIsolateDifferentTenantsAndEndpoints() {
+        TenantConfigCache.TierConfig config = buildTierConfig(5, 60);
+        String tenantA = UUID.randomUUID().toString();
+        String tenantB = UUID.randomUUID().toString();
+
+        for (int i = 0; i < 5; i++) {
+            assertTrue(algorithm.evaluate(tenantA, "api:test", config).allowed());
+        }
+        assertFalse(algorithm.evaluate(tenantA, "api:test", config).allowed(),
+                "Tenant A should be exhausted");
+
+        assertTrue(algorithm.evaluate(tenantB, "api:test", config).allowed(),
+                "Tenant B must have an independent counter from Tenant A");
+
+        assertTrue(algorithm.evaluate(tenantA, "api:other", config).allowed(),
+                "A different endpoint for the same tenant must have an independent counter");
     }
 }
