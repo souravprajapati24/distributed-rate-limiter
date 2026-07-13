@@ -7,6 +7,7 @@ import com.ratelimiter.dto.internal.RateLimitDecision;
 import com.ratelimiter.dto.internal.TenantConfigCache;
 import com.ratelimiter.service.TenantCacheService;
 import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.dao.QueryTimeoutException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -15,6 +16,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.annotation.Order;
+import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -26,6 +28,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -85,11 +88,19 @@ public class RateLimitFilter extends OncePerRequestFilter {
         }
 
         String normalizedEndpoint = normalizeEndpoint(request.getRequestURI());
-        AlgorithmType algorithmType = AlgorithmType.valueOf(tenant.tier().algorithm());
+        TenantConfigCache.OverrideConfig override = findMatchingOverride(tenant, normalizedEndpoint);
+        TenantConfigCache.TierConfig effectiveConfig = resolveEffectiveConfig(tenant, override);
+
+        AlgorithmType algorithmType = AlgorithmType.valueOf(effectiveConfig.algorithm());
         RateLimitAlgorithm algorithm = algorithmSelector.select(algorithmType);
 
-        RateLimitDecision decision = algorithm.evaluate(
-                tenant.tenantId().toString(), normalizedEndpoint, tenant.tier());
+        RateLimitDecision decision;
+        try {
+            decision = algorithm.evaluate(tenant.tenantId().toString(), normalizedEndpoint, effectiveConfig);
+        } catch (RedisConnectionFailureException | QueryTimeoutException e) {
+            handleRedisFailure(request, response, chain, tenant, e);
+            return;
+        }
 
         response.setHeader("X-RateLimit-Limit",     String.valueOf(decision.limit()));
         response.setHeader("X-RateLimit-Remaining", String.valueOf(decision.remaining()));
@@ -99,11 +110,93 @@ public class RateLimitFilter extends OncePerRequestFilter {
         if (decision.allowed()) {
             meterRegistry.counter("ratelimit.requests.allowed", "algorithm", decision.algorithm()).increment();
             chain.doFilter(request, response);
+            return;
+        }
+
+
+        if ("SOFT".equals(effectiveConfig.limitType())) {
+            meterRegistry.counter("ratelimit.requests.soft_warned", "algorithm", decision.algorithm()).increment();
+            response.setHeader("X-RateLimit-Soft-Warned", "true");
+            chain.doFilter(request, response);
+            return;
+        }
+
+        meterRegistry.counter("ratelimit.requests.denied", "algorithm", decision.algorithm()).increment();
+        writeRateLimitExceededResponse(response, decision);
+    }
+
+
+    private void handleRedisFailure(HttpServletRequest request, HttpServletResponse response,
+                                    FilterChain chain, TenantConfigCache tenant, Exception cause)
+            throws IOException, ServletException {
+        log.warn("Redis unavailable while evaluating rate limit for tenant {}. Applying fail strategy: {}. Cause: {}",
+                tenant.tenantId(), tenant.failStrategy(), cause.getMessage());
+
+        meterRegistry.counter("ratelimit.redis.failover", "strategy", tenant.failStrategy()).increment();
+
+        if ("OPEN".equals(tenant.failStrategy())) {
+            chain.doFilter(request, response);
         } else {
-            meterRegistry.counter("ratelimit.requests.denied", "algorithm", decision.algorithm()).increment();
-            writeRateLimitExceededResponse(response, decision);
+            response.setStatus(HttpStatus.SERVICE_UNAVAILABLE.value());
+            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+            response.setCharacterEncoding("UTF-8");
+            response.getWriter().write(
+                    "{\"code\":\"RATE_LIMITER_UNAVAILABLE\",\"message\":\"Rate limiting is temporarily unavailable. Please retry shortly.\"}"
+            );
         }
     }
+
+
+    private TenantConfigCache.OverrideConfig findMatchingOverride(TenantConfigCache tenant, String normalizedEndpoint) {
+        List<TenantConfigCache.OverrideConfig> overrides = tenant.overrides();
+        if (overrides == null || overrides.isEmpty()) {
+            return null;
+        }
+
+        TenantConfigCache.OverrideConfig bestMatch = null;
+        int bestMatchLength = -1;
+
+        for (TenantConfigCache.OverrideConfig candidate : overrides) {
+            String pattern = candidate.endpointPattern();
+            boolean isWildcard = pattern.endsWith("/*");
+            String rawPrefix = isWildcard ? pattern.substring(0, pattern.length() - 2) : pattern;
+            String normalizedPrefix = normalizeEndpoint(rawPrefix);
+
+            boolean matches = isWildcard
+                    ? (normalizedEndpoint.equals(normalizedPrefix) || normalizedEndpoint.startsWith(normalizedPrefix + ":"))
+                    : normalizedEndpoint.equals(normalizedPrefix);
+
+            if (matches && normalizedPrefix.length() > bestMatchLength) {
+                bestMatch = candidate;
+                bestMatchLength = normalizedPrefix.length();
+            }
+        }
+
+        return bestMatch;
+    }
+
+
+    private TenantConfigCache.TierConfig resolveEffectiveConfig(TenantConfigCache tenant,
+                                                                TenantConfigCache.OverrideConfig override) {
+        if (override == null) {
+            return tenant.tier();
+        }
+
+        String algorithm = override.algorithm() != null ? override.algorithm() : tenant.tier().algorithm();
+        String limitType = override.limitType() != null ? override.limitType() : tenant.tier().limitType();
+
+        return new TenantConfigCache.TierConfig(
+                tenant.tier().tierId(),
+                algorithm,
+                override.requestsPerWindow(),
+                override.windowSizeSeconds(),
+                tenant.tier().burstMultiplier(),
+                tenant.tier().leakRatePerSecond(),
+                limitType
+        );
+    }
+
+
 
     private void writeRateLimitExceededResponse(HttpServletResponse response, RateLimitDecision decision)
             throws IOException {
