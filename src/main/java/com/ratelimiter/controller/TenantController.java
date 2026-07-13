@@ -1,7 +1,9 @@
 package com.ratelimiter.controller;
 
+import com.ratelimiter.dto.request.QuotaOverrideRequest;
 import com.ratelimiter.dto.request.TenantRequest;
 import com.ratelimiter.dto.request.TierAssignRequest;
+import com.ratelimiter.dto.response.TenantQuotaOverrideResponse;
 import com.ratelimiter.dto.response.TenantResponse;
 import com.ratelimiter.service.TenantService;
 import jakarta.validation.Valid;
@@ -10,6 +12,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 
@@ -51,5 +54,27 @@ public class TenantController {
     @PostMapping("/{id}/reactivate")
     public ResponseEntity<TenantResponse> reactivateTenant(@PathVariable UUID id) {
         return ResponseEntity.ok(tenantService.reactivateTenant(id));
+    }
+
+    @PostMapping("/{id}/overrides")
+    public ResponseEntity<TenantQuotaOverrideResponse> createOverride(
+            @PathVariable UUID id,
+            @Valid @RequestBody QuotaOverrideRequest request) {
+        TenantQuotaOverrideResponse response = tenantService.createOverride(id, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @GetMapping("/{id}/overrides")
+    public ResponseEntity<List<TenantQuotaOverrideResponse>> listOverrides(@PathVariable UUID id) {
+        return ResponseEntity.ok(tenantService.listOverrides(id));
+    }
+
+
+    @DeleteMapping("/{id}/overrides/{overrideId}")
+    public ResponseEntity<Void> deactivateOverride(
+            @PathVariable UUID id,
+            @PathVariable UUID overrideId) {
+        tenantService.deactivateOverride(id, overrideId);
+        return ResponseEntity.noContent().build();
     }
 }
