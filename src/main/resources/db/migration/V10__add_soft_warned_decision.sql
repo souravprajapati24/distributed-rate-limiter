@@ -1,0 +1,1 @@
+ALTER TYPE decision_type ADD VALUE 'SOFT_WARNED';

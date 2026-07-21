@@ -100,6 +100,13 @@ management:
 
 rate-limiter:
   tenant-cache-ttl-seconds: 30
+  kafka:
+    topics:
+      audit: rate-limit-audit
+      audit-dlt: rate-limit-audit-dlt
+    consumer-groups:
+      audit: rate-limit-audit-consumer
+      dlt: rate-limit-dlt-handler
 
 logging:
   level:

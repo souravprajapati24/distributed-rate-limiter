@@ -64,7 +64,7 @@ public class RateLimitAuditLog {
     @Column(name = "window_end", updatable = false)
     private Instant windowEnd;
 
-    @Column(name = "client_ip", updatable = false, columnDefinition = "inet")
+    @Column(name = "client_ip", updatable = false, length = 45)
     private String clientIp;
 
     @Column(name = "user_agent", updatable = false, length = 500)

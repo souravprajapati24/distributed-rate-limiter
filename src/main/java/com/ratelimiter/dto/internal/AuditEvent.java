@@ -21,18 +21,20 @@ public record AuditEvent(
 ) {
 
     public static AuditEvent from(TenantConfigCache tenant, RateLimitDecision decision,
+                                  String effectiveDecision,
+                                  String effectiveLimitType,
                                   HttpServletRequest request) {
         return new AuditEvent(
                 UUID.randomUUID(),
                 tenant.tenantId(),
                 request.getRequestURI(),
                 request.getMethod(),
-                decision.allowed() ? "ALLOWED" : "DENIED",
+                effectiveDecision,
                 decision.algorithm(),
                 decision.limit() - decision.remaining(),
                 decision.limit(),
                 decision.remaining(),
-                tenant.tier().limitType(),
+                effectiveLimitType,
                 null,
                 Instant.ofEpochSecond(decision.resetAtEpochSecond()),
                 request.getRemoteAddr(),

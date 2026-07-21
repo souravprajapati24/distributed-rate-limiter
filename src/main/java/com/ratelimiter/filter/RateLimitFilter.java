@@ -5,6 +5,7 @@ import com.ratelimiter.algorithm.RateLimitAlgorithm;
 import com.ratelimiter.domain.enums.AlgorithmType;
 import com.ratelimiter.dto.internal.RateLimitDecision;
 import com.ratelimiter.dto.internal.TenantConfigCache;
+import com.ratelimiter.service.audit.AuditEventPublisher;
 import com.ratelimiter.service.TenantCacheService;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.dao.QueryTimeoutException;
@@ -41,6 +42,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private final TenantCacheService tenantCacheService;
     private final AlgorithmSelector algorithmSelector;
     private final MeterRegistry meterRegistry;
+    private final AuditEventPublisher auditEventPublisher;
 
     private static final Set<String> EXCLUDED_PATHS = Set.of(
             "/actuator",
@@ -107,22 +109,32 @@ public class RateLimitFilter extends OncePerRequestFilter {
         response.setHeader("X-RateLimit-Reset",     String.valueOf(decision.resetAtEpochSecond()));
         response.setHeader("X-RateLimit-Algorithm", decision.algorithm());
 
+        String effectiveDecision;
         if (decision.allowed()) {
-            meterRegistry.counter("ratelimit.requests.allowed", "algorithm", decision.algorithm()).increment();
-            chain.doFilter(request, response);
-            return;
+            effectiveDecision = "ALLOWED";
+        } else if ("SOFT".equals(effectiveConfig.limitType())) {
+            effectiveDecision = "SOFT_WARNED";
+        } else {
+            effectiveDecision = "DENIED";
         }
 
+        auditEventPublisher.publish(tenant, decision, effectiveDecision, effectiveConfig.limitType(), request);
 
-        if ("SOFT".equals(effectiveConfig.limitType())) {
-            meterRegistry.counter("ratelimit.requests.soft_warned", "algorithm", decision.algorithm()).increment();
-            response.setHeader("X-RateLimit-Soft-Warned", "true");
-            chain.doFilter(request, response);
-            return;
+        switch (effectiveDecision) {
+            case "ALLOWED" -> {
+                meterRegistry.counter("ratelimit.requests.allowed", "algorithm", decision.algorithm()).increment();
+                chain.doFilter(request, response);
+            }
+            case "SOFT_WARNED" -> {
+                meterRegistry.counter("ratelimit.requests.soft_warned", "algorithm", decision.algorithm()).increment();
+                response.setHeader("X-RateLimit-Soft-Warned", "true");
+                chain.doFilter(request, response);
+            }
+            default -> {
+                meterRegistry.counter("ratelimit.requests.denied", "algorithm", decision.algorithm()).increment();
+                writeRateLimitExceededResponse(response, decision);
+            }
         }
-
-        meterRegistry.counter("ratelimit.requests.denied", "algorithm", decision.algorithm()).increment();
-        writeRateLimitExceededResponse(response, decision);
     }
 
 
