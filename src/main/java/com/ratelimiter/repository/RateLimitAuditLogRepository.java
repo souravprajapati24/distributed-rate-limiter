@@ -39,6 +39,18 @@ public interface RateLimitAuditLogRepository extends JpaRepository<RateLimitAudi
             Pageable pageable
     );
 
+    /**
+     * Phase 5 addition: broadest admin-overview query — no tenant or decision
+     * filter at all, bounded only by time range and pagination. Uses
+     * idx_audit_evaluated_at (Phase 1) for the time-range scan. Intended for
+     * low-frequency admin/operations use, not a routine high-throughput call.
+     */
+    Page<RateLimitAuditLog> findAllByEvaluatedAtBetween(
+            Instant from,
+            Instant to,
+            Pageable pageable
+    );
+
 
     @Query("""
         SELECT a.tenantId, a.decision, COUNT(a)
