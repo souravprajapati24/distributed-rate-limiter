@@ -1,0 +1,229 @@
+{
+  "title": "Distributed Rate Limiter — Platform Overview",
+  "uid": "rate-limiter-overview",
+  "timezone": "utc",
+  "refresh": "5s",
+  "schemaVersion": 39,
+  "version": 1,
+  "panels": [
+    {
+      "id": 1,
+      "title": "Request Rate by Algorithm (Allowed)",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-datasource"
+      },
+      "targets": [
+        {
+          "expr": "sum by (algorithm) (rate(ratelimit_requests_allowed_total[1m]))",
+          "legendFormat": "{{algorithm}} — allowed"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Denial Rate % (Hard Denials Only)",
+      "type": "gauge",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-datasource"
+      },
+      "targets": [
+        {
+          "expr": "100 * sum(rate(ratelimit_requests_denied_total[5m])) / (sum(rate(ratelimit_requests_allowed_total[5m])) + sum(rate(ratelimit_requests_denied_total[5m])) + sum(rate(ratelimit_requests_soft_warned_total[5m])))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 5
+              },
+              {
+                "color": "red",
+                "value": 20
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Soft-Warned Rate (breaches allowed through, Phase 4)",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-datasource"
+      },
+      "targets": [
+        {
+          "expr": "sum by (algorithm) (rate(ratelimit_requests_soft_warned_total[1m]))",
+          "legendFormat": "{{algorithm}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Redis / Lua Evaluation Latency (p50 / p95 / p99)",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-datasource"
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(ratelimit_redis_latency_seconds_bucket[5m])))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(ratelimit_redis_latency_seconds_bucket[5m])))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(ratelimit_redis_latency_seconds_bucket[5m])))",
+          "legendFormat": "p99"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Tenant Config Cache Hit Rate",
+      "type": "stat",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-datasource"
+      },
+      "targets": [
+        {
+          "expr": "100 * sum(rate(ratelimit_cache_hit_total[5m])) / (sum(rate(ratelimit_cache_hit_total[5m])) + sum(rate(ratelimit_cache_miss_total[5m])))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Redis Failover Events (by fail_strategy)",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-datasource"
+      },
+      "targets": [
+        {
+          "expr": "sum by (strategy) (rate(ratelimit_redis_failover_total[1m]))",
+          "legendFormat": "{{strategy}}"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Audit Pipeline Health (Kafka publish + consume)",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-datasource"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(ratelimit_audit_published_total[1m]))",
+          "legendFormat": "published (producer)"
+        },
+        {
+          "expr": "sum(rate(ratelimit_audit_persisted_total[1m]))",
+          "legendFormat": "persisted (consumer -> PostgreSQL)"
+        },
+        {
+          "expr": "sum(rate(ratelimit_audit_failed_total[1m]))",
+          "legendFormat": "publish failed"
+        },
+        {
+          "expr": "sum(rate(ratelimit_audit_dlt_total[1m]))",
+          "legendFormat": "routed to DLT"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Usage Aggregation Job (rows upserted per run)",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-datasource"
+      },
+      "targets": [
+        {
+          "expr": "sum by (granularity) (increase(ratelimit_usage_aggregation_rows_total[1h]))",
+          "legendFormat": "{{granularity}}"
+        }
+      ]
+    }
+  ]
+}

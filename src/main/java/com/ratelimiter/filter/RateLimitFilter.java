@@ -8,6 +8,7 @@ import com.ratelimiter.dto.internal.TenantConfigCache;
 import com.ratelimiter.service.audit.AuditEventPublisher;
 import com.ratelimiter.service.TenantCacheService;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import org.springframework.dao.QueryTimeoutException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -97,12 +98,18 @@ public class RateLimitFilter extends OncePerRequestFilter {
         RateLimitAlgorithm algorithm = algorithmSelector.select(algorithmType);
 
         RateLimitDecision decision;
+        Timer.Sample redisLatencySample = Timer.start(meterRegistry);
         try {
             decision = algorithm.evaluate(tenant.tenantId().toString(), normalizedEndpoint, effectiveConfig);
         } catch (RedisConnectionFailureException | QueryTimeoutException e) {
             handleRedisFailure(request, response, chain, tenant, e);
             return;
         }
+        redisLatencySample.stop(Timer.builder("ratelimit.redis.latency")
+                .description("Latency of a single RateLimitAlgorithm.evaluate() call, including the Redis/Lua round trip")
+                .tag("algorithm", decision.algorithm())
+                .publishPercentileHistogram()
+                .register(meterRegistry));
 
         response.setHeader("X-RateLimit-Limit",     String.valueOf(decision.limit()));
         response.setHeader("X-RateLimit-Remaining", String.valueOf(decision.remaining()));
