@@ -44,9 +44,9 @@ public class RedisConfig {
     private GenericObjectPoolConfig<StatefulConnection<?,?>> buildPoolConfig() {
         GenericObjectPoolConfig<StatefulConnection<?,?>> poolConfig = new GenericObjectPoolConfig<>();
 
-        poolConfig.setMaxTotal(20);
-        poolConfig.setMaxIdle(10);
-        poolConfig.setMinIdle(2);
+        poolConfig.setMaxTotal(50);
+        poolConfig.setMaxIdle(20);
+        poolConfig.setMinIdle(5);
         poolConfig.setMaxWait(Duration.ofMillis(2000));
 
         poolConfig.setTestOnBorrow(true);

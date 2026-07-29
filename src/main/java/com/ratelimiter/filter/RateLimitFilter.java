@@ -90,6 +90,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return;
         }
 
+        String endpoint  = request.getRequestURI();
+        String httpMethod = request.getMethod();
+        String clientIp  = request.getRemoteAddr();
+
+
         String normalizedEndpoint = normalizeEndpoint(request.getRequestURI());
         TenantConfigCache.OverrideConfig override = findMatchingOverride(tenant, normalizedEndpoint);
         TenantConfigCache.TierConfig effectiveConfig = resolveEffectiveConfig(tenant, override);
@@ -125,7 +130,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
             effectiveDecision = "DENIED";
         }
 
-        auditEventPublisher.publish(tenant, decision, effectiveDecision, effectiveConfig.limitType(), request);
+        auditEventPublisher.publish(
+                tenant, decision, effectiveDecision, effectiveConfig.limitType(),
+                endpoint, httpMethod, clientIp
+        );
 
         switch (effectiveDecision) {
             case "ALLOWED" -> {
