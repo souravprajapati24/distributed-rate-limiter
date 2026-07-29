@@ -1,8 +1,8 @@
 package com.ratelimiter.dto.internal;
 
-import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
 import java.util.UUID;
+
 public record AuditEvent(
         UUID    eventId,
         UUID    tenantId,
@@ -19,16 +19,17 @@ public record AuditEvent(
         String  clientIp,
         Instant evaluatedAt
 ) {
-
     public static AuditEvent from(TenantConfigCache tenant, RateLimitDecision decision,
                                   String effectiveDecision,
                                   String effectiveLimitType,
-                                  HttpServletRequest request) {
+                                  String endpoint,
+                                  String httpMethod,
+                                  String clientIp) {
         return new AuditEvent(
                 UUID.randomUUID(),
                 tenant.tenantId(),
-                request.getRequestURI(),
-                request.getMethod(),
+                endpoint,
+                httpMethod,
                 effectiveDecision,
                 decision.algorithm(),
                 decision.limit() - decision.remaining(),
@@ -37,7 +38,7 @@ public record AuditEvent(
                 effectiveLimitType,
                 null,
                 Instant.ofEpochSecond(decision.resetAtEpochSecond()),
-                request.getRemoteAddr(),
+                clientIp,
                 Instant.now()
         );
     }

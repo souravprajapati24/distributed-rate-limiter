@@ -4,7 +4,6 @@ import com.ratelimiter.dto.internal.AuditEvent;
 import com.ratelimiter.dto.internal.RateLimitDecision;
 import com.ratelimiter.dto.internal.TenantConfigCache;
 import io.micrometer.core.instrument.MeterRegistry;
-import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,11 +23,18 @@ public class AuditEventPublisher {
     private final MeterRegistry meterRegistry;
 
     @Async("auditExecutor")
-    public void publish(TenantConfigCache tenant, RateLimitDecision decision,
+    public void publish(TenantConfigCache tenant,
+                        RateLimitDecision decision,
                         String effectiveDecision,
                         String effectiveLimitType,
-                        HttpServletRequest request) {
-        AuditEvent event = AuditEvent.from(tenant, decision, effectiveDecision, effectiveLimitType, request);
+                        String endpoint,
+                        String httpMethod,
+                        String clientIp) {
+
+        AuditEvent event = AuditEvent.from(
+                tenant, decision, effectiveDecision, effectiveLimitType,
+                endpoint, httpMethod, clientIp
+        );
 
         kafkaTemplate.send(auditTopic, tenant.tenantId().toString(), event)
                 .whenComplete((result, ex) -> {
