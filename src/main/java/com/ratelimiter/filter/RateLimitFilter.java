@@ -50,7 +50,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
             "/api/v1/tiers",
             "/api/v1/tenants",
             "/api/v1/audit",
-            "/api/v1/usage"
+            "/api/v1/usage",
+            "/api/v1/auth"
     );
 
     @Override
