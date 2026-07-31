@@ -1,8 +1,10 @@
 package com.ratelimiter.controller;
 
+import com.ratelimiter.dto.request.KeyRotationRequest;
 import com.ratelimiter.dto.request.QuotaOverrideRequest;
 import com.ratelimiter.dto.request.TenantRequest;
 import com.ratelimiter.dto.request.TierAssignRequest;
+import com.ratelimiter.dto.response.KeyRotationResponse;
 import com.ratelimiter.dto.response.TenantQuotaOverrideResponse;
 import com.ratelimiter.dto.response.TenantResponse;
 import com.ratelimiter.service.TenantService;
@@ -76,5 +78,14 @@ public class TenantController {
             @PathVariable UUID overrideId) {
         tenantService.deactivateOverride(id, overrideId);
         return ResponseEntity.noContent().build();
+    }
+
+
+    @PostMapping("/{id}/rotate-key")
+    public ResponseEntity<KeyRotationResponse> rotateApiKey(
+            @PathVariable UUID id,
+            @Valid @RequestBody(required = false) KeyRotationRequest request) {
+        KeyRotationResponse response = tenantService.rotateApiKey(id, request);
+        return ResponseEntity.ok(response);
     }
 }

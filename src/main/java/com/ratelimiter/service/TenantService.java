@@ -1,19 +1,23 @@
 package com.ratelimiter.service;
 
+import com.ratelimiter.domain.entity.ApiKeyRotation;
 import com.ratelimiter.domain.entity.QuotaTier;
 import com.ratelimiter.domain.entity.Tenant;
 import com.ratelimiter.domain.entity.TenantQuotaOverride;
 import com.ratelimiter.domain.enums.AlgorithmType;
 import com.ratelimiter.domain.enums.FailStrategyType;
 import com.ratelimiter.dto.internal.TenantConfigCache;
+import com.ratelimiter.dto.request.KeyRotationRequest;
 import com.ratelimiter.dto.request.QuotaOverrideRequest;
 import com.ratelimiter.dto.request.TierAssignRequest;
 import com.ratelimiter.dto.request.TenantRequest;
+import com.ratelimiter.dto.response.KeyRotationResponse;
 import com.ratelimiter.dto.response.TenantQuotaOverrideResponse;
 import com.ratelimiter.dto.response.TenantResponse;
 import com.ratelimiter.exception.DuplicateTenantException;
 import com.ratelimiter.exception.TenantNotFoundException;
 import com.ratelimiter.exception.TierNotFoundException;
+import com.ratelimiter.repository.ApiKeyRotationRepository;
 import com.ratelimiter.repository.TenantQuotaOverrideRepository;
 import com.ratelimiter.repository.TenantRepository;
 import com.ratelimiter.repository.QuotaTierRepository;
@@ -42,6 +46,7 @@ public class TenantService {
     private final QuotaTierRepository quotaTierRepository;
     private final TenantCacheService tenantCacheService;
     private final TenantQuotaOverrideRepository tenantQuotaOverrideRepository;
+    private final ApiKeyRotationRepository apiKeyRotationRepository;
 
 
     @Transactional
@@ -228,6 +233,54 @@ public class TenantService {
 
     private List<TenantQuotaOverride> loadActiveOverrides(UUID tenantId) {
         return tenantQuotaOverrideRepository.findByTenantIdAndActiveTrue(tenantId);
+    }
+
+
+    @Transactional
+    public KeyRotationResponse rotateApiKey(UUID tenantId, KeyRotationRequest request) {
+        Tenant tenant = tenantRepository.findById(tenantId)
+                .orElseThrow(() -> new TenantNotFoundException(tenantId));
+
+        String oldKeyHash = tenant.getApiKeyHash();
+
+        String newPlaintextKey = generateApiKey();
+        String newKeyHash      = hashApiKey(newPlaintextKey);
+
+        String rotatedBy = (request != null && request.rotatedBy() != null && !request.rotatedBy().isBlank())
+                ? request.rotatedBy()
+                : "admin";
+        String reason = (request != null) ? request.reason() : null;
+
+        ApiKeyRotation rotation = ApiKeyRotation.builder()
+                .tenantId(tenantId)
+                .oldKeyHash(oldKeyHash)
+                .newKeyHash(newKeyHash)
+                .rotatedBy(rotatedBy)
+                .reason(reason)
+                .build();
+        apiKeyRotationRepository.save(rotation);
+
+        tenant.setApiKeyHash(newKeyHash);
+        tenantRepository.save(tenant);
+
+        tenantCacheService.invalidate(oldKeyHash);
+
+        List<TenantQuotaOverride> overrides = loadActiveOverrides(tenantId);
+        tenantCacheService.put(newKeyHash, TenantConfigCache.from(tenant, overrides));
+
+        log.info("API key rotated for tenant {} (ID: {}) by {}. Old key hash suffix: ...{}",
+                tenant.getName(), tenantId, rotatedBy,
+                oldKeyHash.substring(Math.max(0, oldKeyHash.length() - 8)));
+
+        return new KeyRotationResponse(
+                tenantId,
+                tenant.getName(),
+                newPlaintextKey,
+                oldKeyHash.substring(0, Math.min(8, oldKeyHash.length())),
+                rotatedBy,
+                reason,
+                rotation.getRotatedAt() != null ? rotation.getRotatedAt() : java.time.Instant.now()
+        );
     }
 
 
