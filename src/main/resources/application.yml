@@ -108,6 +108,10 @@ rate-limiter:
       audit: rate-limit-audit-consumer
       dlt: rate-limit-dlt-handler
 
+  jwt:
+    secret: ${JWT_SECRET:this-is-a-test-secret-key-that-is-at-least-32-characters-long}
+    expiration-ms: 28800000
+
 logging:
   level:
     com.ratelimiter:            DEBUG

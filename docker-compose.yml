@@ -108,6 +108,7 @@ services:
       REDIS_HOST:             ${REDIS_HOST}
       REDIS_PORT:             ${REDIS_PORT}
       KAFKA_BOOTSTRAP:        ${KAFKA_BOOTSTRAP}
+      JWT_SECRET:             ${JWT_SECRET}
     ports:
       - "8080:8080"
     networks:
