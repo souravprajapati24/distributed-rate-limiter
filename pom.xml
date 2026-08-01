@@ -117,11 +117,7 @@
             <artifactId>jackson-datatype-jsr310</artifactId>
         </dependency>
 
-        <!--
-    JJWT (0.12.x) — the current, actively-maintained JWT library for Java.
-    We use the three-jar split: api (interfaces), impl (implementation),
-    jackson (JSON serialization). This avoids the deprecated single-jar.
--->
+
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-api</artifactId>
@@ -140,9 +136,6 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- Testcontainers BOM + dependencies (for integration tests later) -->
-
-        <!-- Spring Security Test (MockMvc integration) -->
         <dependency>
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-test</artifactId>

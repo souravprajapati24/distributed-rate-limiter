@@ -113,7 +113,7 @@ rate-limiter:
     # The secret must be at least 256 bits (32 bytes) for HS256.
     # In production, inject via environment variable: JWT_SECRET.
     # NEVER commit a real secret to Git.
-    secret: ${JWT_SECRET}
+    secret: ${JWT_SECRET:this-is-a-test-secret-key-that-is-at-least-32-characters-long}
     # Access token expiry: 8 hours for admin workflows
     expiration-ms: 28800000
 

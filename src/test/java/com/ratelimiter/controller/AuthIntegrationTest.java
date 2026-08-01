@@ -49,7 +49,7 @@ class AuthIntegrationTest {
         r.add("spring.kafka.bootstrap-servers", kafka::getBootstrapServers);
         r.add(
                 "rate-limiter.jwt.secret",
-                () -> "this-is-a-dev-only-secret-replace-in-prod-must-be-32-chars"
+                () -> "this-is-a-test-secret-key-that-is-at-least-32-characters-long"
         );
     }
 
