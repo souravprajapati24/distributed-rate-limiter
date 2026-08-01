@@ -39,7 +39,7 @@ class RedisFailoverIntegrationTest {
 
     @Container
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:15-alpine")
-            .withDatabaseName("ratelimiter").withUsername("seceret").withPassword("postgres");
+            .withDatabaseName("ratelimiter_test").withUsername("postgre").withPassword("secret");
 
     @Container
     static GenericContainer<?> redis = new GenericContainer<>("redis:7-alpine")
@@ -112,7 +112,7 @@ class RedisFailoverIntegrationTest {
     void closedFailStrategyReturns503DuringRedisOutage() throws Exception {
         redis.stop();
         try {
-            mockMvc.perform(get("/api/v1/probe").header("X-Api-Key", closedApiKey))
+            mockMvc.perform(get("/api/v1/test").header("X-Api-Key", closedApiKey))
                     .andExpect(status().isServiceUnavailable());
         } finally {
             redis.start();

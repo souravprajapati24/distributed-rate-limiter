@@ -10,11 +10,6 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
 
-    # PostgreSQL as a GitHub Actions service container. Testcontainers already
-    # handles Redis and Kafka entirely inside individual test classes (Phases
-    # 2-5) — this service exists specifically because @SpringBootTest boots
-    # Flyway against a DataSource bean before any test method (and therefore
-    # before any test-declared @Container) has run.
     services:
       postgres:
         image: postgres:15-alpine

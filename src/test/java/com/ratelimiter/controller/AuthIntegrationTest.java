@@ -31,7 +31,7 @@ class AuthIntegrationTest {
 
     @Container
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:15-alpine")
-            .withDatabaseName("ratelimiter_db").withUsername("ratelimiter").withPassword("secret");
+            .withDatabaseName("ratelimiter_db").withUsername("postgres").withPassword("secret");
 
     @Container
     static GenericContainer<?> redis = new GenericContainer<>("redis:7-alpine").withExposedPorts(6379);

@@ -54,8 +54,40 @@ class AlgorithmSelectionEndToEndTest {
 
     private record TenantHandle(String apiKey, String tenantId) {}
 
-    private String findTierId(String tierName) {
-        ResponseEntity<String> response = restTemplate.getForEntity(baseUrl("/api/v1/tiers"), String.class);
+    private String obtainAdminJwt() throws Exception {
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        String body = """
+        {
+          "username":"sourav",
+          "password":"Sourav@123"
+        }
+        """;
+
+        ResponseEntity<String> response = restTemplate.postForEntity(
+                baseUrl("/api/v1/auth/login"),
+                new HttpEntity<>(body, headers),
+                String.class);
+
+        JsonNode json = objectMapper.readTree(response.getBody());
+
+        return json.get("accessToken").asText();
+    }
+
+    private String findTierId(String tierName) throws Exception {
+        String token = obtainAdminJwt();
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(token);
+
+        ResponseEntity<String> response =
+                restTemplate.exchange(
+                        baseUrl("/api/v1/tiers"),
+                        HttpMethod.GET,
+                        new HttpEntity<>(headers),
+                        String.class);
         try {
             JsonNode tiers = objectMapper.readTree(response.getBody());
             for (JsonNode tier : tiers) {
@@ -69,7 +101,7 @@ class AlgorithmSelectionEndToEndTest {
         throw new IllegalStateException("Tier not found: " + tierName + " — was V8/V9 seed data applied?");
     }
 
-    private TenantHandle registerTenant(String tierName, String emailPrefix) {
+    private TenantHandle registerTenant(String tierName, String emailPrefix) throws Exception {
         String tierId = findTierId(tierName);
         String body = String.format(
                 "{\"name\":\"%s Test\",\"email\":\"%s-%d@test.com\",\"tierId\":\"%s\"}",
@@ -77,8 +109,13 @@ class AlgorithmSelectionEndToEndTest {
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        ResponseEntity<String> response = restTemplate.postForEntity(
-                baseUrl("/api/v1/tenants"), new HttpEntity<>(body, headers), String.class);
+        headers.setBearerAuth(obtainAdminJwt());
+        ResponseEntity<String> response =
+                restTemplate.exchange(
+                        baseUrl("/api/v1/tenants"),
+                        HttpMethod.POST,
+                        new HttpEntity<>(body, headers),
+                        String.class);
 
         assertEquals(HttpStatus.CREATED, response.getStatusCode());
         try {
@@ -97,7 +134,7 @@ class AlgorithmSelectionEndToEndTest {
     }
 
     @Test
-    void freeTierTenantIsEnforcedWithFixedWindow() {
+    void freeTierTenantIsEnforcedWithFixedWindow() throws Exception {
         TenantHandle tenant = registerTenant("FREE", "free");
         ResponseEntity<String> response = callProtectedEndpoint(tenant.apiKey());
 
@@ -106,7 +143,7 @@ class AlgorithmSelectionEndToEndTest {
     }
 
     @Test
-    void starterTierTenantIsEnforcedWithSlidingWindow() {
+    void starterTierTenantIsEnforcedWithSlidingWindow() throws Exception {
         TenantHandle tenant = registerTenant("STARTER", "starter");
         ResponseEntity<String> response = callProtectedEndpoint(tenant.apiKey());
 
@@ -114,7 +151,7 @@ class AlgorithmSelectionEndToEndTest {
     }
 
     @Test
-    void growthTierTenantIsEnforcedWithTokenBucket() {
+    void growthTierTenantIsEnforcedWithTokenBucket() throws Exception {
         TenantHandle tenant = registerTenant("GROWTH", "growth");
         ResponseEntity<String> response = callProtectedEndpoint(tenant.apiKey());
 
@@ -122,7 +159,7 @@ class AlgorithmSelectionEndToEndTest {
     }
 
     @Test
-    void internalDownstreamTenantIsEnforcedWithLeakyBucket() {
+    void internalDownstreamTenantIsEnforcedWithLeakyBucket() throws Exception {
         TenantHandle tenant = registerTenant("INTERNAL_DOWNSTREAM", "internal");
         ResponseEntity<String> response = callProtectedEndpoint(tenant.apiKey());
 
@@ -130,7 +167,7 @@ class AlgorithmSelectionEndToEndTest {
     }
 
     @Test
-    void tenantsOnDifferentAlgorithmsEnforceWithZeroCrossInterference() {
+    void tenantsOnDifferentAlgorithmsEnforceWithZeroCrossInterference() throws Exception {
         TenantHandle fixedWindowTenant = registerTenant("FREE", "isolation-fw");
         TenantHandle tokenBucketTenant = registerTenant("GROWTH", "isolation-tb");
 
