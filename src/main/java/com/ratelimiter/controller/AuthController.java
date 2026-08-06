@@ -4,8 +4,16 @@ import com.ratelimiter.domain.entity.AdminUser;
 import com.ratelimiter.dto.request.AuthLoginRequest;
 import com.ratelimiter.dto.request.AuthRegisterRequest;
 import com.ratelimiter.dto.response.AuthResponse;
+import com.ratelimiter.exception.GlobalExceptionHandler;
 import com.ratelimiter.service.AdminUserService;
 import com.ratelimiter.service.JwtService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,11 +31,55 @@ import java.time.Instant;
 @RestController
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
+@Tag(
+        name = "Authentication",
+        description = "User login and admin user registration"
+)
 public class AuthController {
 
     private final AuthenticationManager authenticationManager;
     private final AdminUserService adminUserService;
     private final JwtService jwtService;
+
+    @Operation(
+            summary = "Authenticate admin user and obtain JWT token",
+            description = "Authenticates an admin user using username and password." +
+                    " Returns a JWT access token that must be supplied in the Authorization header for subsequent protected API requests."
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Login successful; JWT token returned",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = AuthResponse.class)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Validation error (missing/invalid fields)",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = GlobalExceptionHandler.ErrorResponse.class)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Invalid credentials (wrong username or password)",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = GlobalExceptionHandler.ErrorResponse.class)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "Internal server error",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = GlobalExceptionHandler.ErrorResponse.class)
+                    )
+            )
+    })
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@Valid @RequestBody AuthLoginRequest request) {
@@ -66,6 +118,62 @@ public class AuthController {
         }
     }
 
+    @Operation(
+            summary = "Register a new admin user",
+            description = "Creates a new administrator account with the specified role. " +
+                    "**Requires ADMIN privileges.** This endpoint can only be invoked by authenticated administrators.",
+            security = @SecurityRequirement(name = "Bearer Authentication")
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "201",
+                    description = "Admin user created successfully",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = java.util.Map.class)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Validation error or invalid argument",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = GlobalExceptionHandler.ErrorResponse.class)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Authentication required (missing or invalid JWT token)",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = GlobalExceptionHandler.ErrorResponse.class)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "Insufficient permissions (ADMIN role required)",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = GlobalExceptionHandler.ErrorResponse.class)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "409",
+                    description = "Conflict (duplicate admin username/email)",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = GlobalExceptionHandler.ErrorResponse.class)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "Internal server error",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = GlobalExceptionHandler.ErrorResponse.class)
+                    )
+            )
+    })
     @PostMapping("/register")
     public ResponseEntity<?> register(@Valid @RequestBody AuthRegisterRequest request) {
         AdminUser created = adminUserService.registerAdmin(request);

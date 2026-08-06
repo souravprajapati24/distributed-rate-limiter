@@ -98,6 +98,22 @@ management:
       export:
         enabled: true
 
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+    operations-sorter: method
+    tags-sorter: alpha
+    use-root-path: true
+    doc-expansion: none
+    show-extensions: true
+
+
+  show-actuator: false
+  model-and-view-allowed: false
+
 rate-limiter:
   tenant-cache-ttl-seconds: 30
   kafka:
