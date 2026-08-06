@@ -3,9 +3,17 @@ package com.ratelimiter.controller;
 import com.ratelimiter.domain.entity.RateLimitAuditLog;
 import com.ratelimiter.domain.enums.DecisionType;
 import com.ratelimiter.dto.response.AuditLogResponse;
+import com.ratelimiter.exception.GlobalExceptionHandler;
 import com.ratelimiter.exception.TenantNotFoundException;
 import com.ratelimiter.repository.RateLimitAuditLogRepository;
 import com.ratelimiter.repository.TenantRepository;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -23,11 +31,71 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/audit")
 @RequiredArgsConstructor
+@Tag(
+        name = "Audit Logs",
+        description = "Rate-limit decision auditing and analysis"
+)
 public class AuditController {
 
     private final RateLimitAuditLogRepository auditLogRepository;
     private final TenantRepository tenantRepository;
 
+    @Operation(
+            summary = "Query audit log with flexible filtering",
+            description = "Retrieves rate-limit enforcement audit log entries. Supports filtering by tenant ID, decision, and time range. " +
+                    "Returns paginated results ordered from the most recent entries to the oldest. If no filters are provided, all audit log entries are returned.",
+            security = @SecurityRequirement(name = "Bearer Authentication")
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Audit logs retrieved successfully",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = Map.class)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Validation error or invalid argument",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = GlobalExceptionHandler.ErrorResponse.class)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Authentication required (missing or invalid JWT token)",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = GlobalExceptionHandler.ErrorResponse.class)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "Insufficient permissions (ADMIN or OPERATOR role required)",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = GlobalExceptionHandler.ErrorResponse.class)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "Resource not found (tenant ID does not exist)",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = GlobalExceptionHandler.ErrorResponse.class)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "Internal server error",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = GlobalExceptionHandler.ErrorResponse.class)
+                    )
+            )
+    })
     @GetMapping
     public ResponseEntity<Map<String, Object>> queryAuditLog(
             @RequestParam(required = false) UUID tenantId,
